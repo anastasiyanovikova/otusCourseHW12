@@ -28,7 +28,7 @@ jobs:
       - run: sudo apt-get install libboost-all-dev -y
       - run: cmake . -DPATCH_VERSION=${{ github.run_number }}
       - run: cmake --build .
-      - run: cmake --build . --target join_server
+      - run: cmake --build . --target map_reduce
       - run: cmake --build . --target package
       - name: Create Release
         id: create_release
