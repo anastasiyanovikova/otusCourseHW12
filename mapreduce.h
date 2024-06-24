@@ -1,86 +1,51 @@
-/**
- * Это MapReduce фреймворк.
- * Он универсальный.
- * Он может выполнять разные map_reduce задачи.
- * Он просто обрабатывает какие-то данные с помощью каких-то функций в нескольких потоках.
- * Он ничего не знает о задаче, которую решает.
- * Здесь не должно быть кода, завязанного на конкретную задачу - определение длины префикса.
- * 
- * С помощью этого фреймворка должны решаться разные задачи.
- * Когда напишете это, попробуйте решить с помощью этого фреймворка все задачи, которые мы разбирали на лекции.
- * 
- * Это наш самописный аналог hadoop mapreduce.
- * Он на самом деле не работает с по-настоящему большими данными, потому что выполняется на одной машине.
- * Но мы делаем вид, что данных много, и представляем, что наши потоки - это процессы на разных узлах.
- * 
- * Ни один из потоков не должен полностью загружать свои данные в память или пробегаться по всем данным.
- * Каждый из потоков обрабатывает только свой блок.
- * 
- * На самом деле даже один блок данных не должен полностью грузиться в оперативку, а должен обрабатываться построчно.
- * Но в домашней работе можем этим пренебречь и загрузить один блок в память одним потоком.
- * 
- * Всё в этом файле - это рекомендация.
- * Если что-то будет слишком сложно реализовать, идите на компромисс, пренебрегайте чем-нибудь.
- * Лучше сделать что-нибудь, чем застрять на каком-нибудь моменте и не сделать ничего.
- */
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <functional>
+#include <list>
+#include <mutex>
+
+
+class MapReduceBaseFunctions
+{
+    public:
+    virtual void operator()(const std::string& input, std::string& resultStr) = 0;
+};
+
+class Block {
+public:
+    Block(size_t start, size_t end) : from(start), to(end){}
+    size_t from;
+    size_t to;
+};
+
 class MapReduce {
 public:
-    void run(const std::filesystem::path& input, const std::filesystem::path& output) {
-        auto blocks = split_file(input, mappers_count);
-
-        // Создаём mappers_count потоков
-        // В каждом потоке читаем свой блок данных
-        // Применяем к строкам данных функцию mapper
-        // Сортируем результат каждого потока
-        // Результат сохраняется в файловую систему (представляем, что это большие данные)
-        // Каждый поток сохраняет результат в свой файл (представляем, что потоки выполняются на разных узлах)
-
-
-        // Создаём reducers_count новых файлов
-        // Из mappers_count файлов читаем данные (результат фазы map) и перекладываем в reducers_count (вход фазы reduce)
-        // Перекладываем так, чтобы:
-        //     * данные были отсортированы
-        //     * одинаковые ключи оказывались в одном файле, чтобы одинаковые ключи попали на один редьюсер
-        //     * файлы примерно одинакового размера, чтобы редьюсеры были загружены примерно равномерно
-        //
-        // Гуглить: алгоритмы во внешней памяти, external sorting, многопутевое слияние
-        //
-        // Для упрощения задачи делаем это в один поток
-        // Но все данные в память одновременно не загружаем, читаем построчно и пишем
-        //
-        // Задание творческое!
-        // Я не уверен, что все вышеперечисленные требования выполнимы одновременно
-        // Возможно, придётся идти на компромисс, упрощая какие-то детали реализации
-        // Но это то, к чему нужно стремиться
-        // Проектирование ПО часто требует идти на компромиссы
-        // Это как оптимизация функции многих переменных с доп. ограничениями
-
-
-        // Создаём reducers_count потоков
-        // В каждом потоке читаем свой файл (выход предыдущей фазы)
-        // Применяем к строкам функцию reducer
-        // Результат сохраняется в файловую систему 
-        //             (во многих задачах выход редьюсера - большие данные, хотя в нашей задаче можно написать функцию reduce так, чтобы выход не был большим)
-    }
+    MapReduce(int mapN, int redN);
+    void run(const std::string& input);
+    bool setMapper(const std::shared_ptr <MapReduceBaseFunctions> & mapper);
+    bool setReducer(const std::shared_ptr <MapReduceBaseFunctions> &reducer);
 private:
-    struct Block {
-        size_t from;
-        size_t to;
-    }
-    std::vector<Block> split_file(const std::filesystem::path& file, int blocks_count) {
-        /**
-         * Эта функция не читает весь файл.
-         * 
-         * Определяем размер файла в байтах.
-         * Делим размер на количество блоков - получаем границы блоков.
-         * Читаем данные только вблизи границ.
-         * Выравниваем границы блоков по границам строк.
-         */
-    }
+    std::vector<Block> split_file(const std::string& file, int blocks_count);
 
-    int mappers_count;
-    int reducers_count;
+    int m_mappers_count;
+    int m_reducers_count;
+    std::shared_ptr <MapReduceBaseFunctions> m_mapper;
+    std::shared_ptr <MapReduceBaseFunctions> m_reducer;
 
-    std::function</*type*/> mapper;
-    std::function</*type*/> reducer;
-}
+    std::list<std::shared_ptr<std::list<std::string> >> map(const std::string& file); 
+    std::list<std::shared_ptr<std::list<std::string> >> shuffle(std::list<std::shared_ptr<std::list<std::string> >> mapLists); 
+    void reduce(std::list<std::shared_ptr<std::list<std::string> >> shuffleLists); 
+
+    int findNewLine(std::ifstream& file, const size_t& file_size, bool forward);
+
+    static std::shared_ptr<std::list<std::string>> mapF(const std::string& fileName,
+                                                        const Block block, 
+                                                        std::shared_ptr <MapReduceBaseFunctions>  mapper,
+                                                        std::mutex& fileLock);
+
+    static std::shared_ptr<std::list<std::string>> reduceF(std::shared_ptr<std::list<std::string>> shuffleList, 
+                                                          std::shared_ptr <MapReduceBaseFunctions>  reducer);
+
+    static void saveListToFile(const std::string& file, const std::shared_ptr<std::list<std::string>> & data);
+};
